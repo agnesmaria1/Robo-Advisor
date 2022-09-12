@@ -25,7 +25,44 @@ def build_validation_result(is_valid, violated_slot, message_content):
         "violatedSlot": violated_slot,
         "message": {"contentType": "PlainText", "content": message_content},
     }
+def get_investment_recommendation(risk_level):
+    risk_levels={
+        "none": "100% bonds (AGG), 0% equities (SPY)",
+        "low": "60% bonds (AGG), 40% equities (SPY)",
+        "medium": "40% bonds (AGG), 60% equities (SPY)",
+        "high": "20% bonds (AGG), 80% equities (SPY)",
+    }
+    return risk_levels[risk_level.lower()]
 
+
+def validate_data(age, investment_amount, intent_request):
+    if age is not None:
+        age = parse_int(age)
+        if age < 0:
+            return build_validation_result(
+                False,
+                "age",
+                "You should be older than 0 to use this service,"
+                "Please provide a different age."
+            )
+        elif age => 65:
+            return build_validation_result(
+                False,
+                "age",
+                "You should be younger than 65 to use this service,"
+                "Please provide a different age."
+            )
+        if investment_amount is not None:
+            investment_amount = parse_int(investment_amount)
+        if investment_amount < 5000:
+            return build_validation_result(
+                False,
+                "investment_amount",
+                "Investment amount should be greater than 5000 to use this service,"
+                "Please provide a different amount."
+            )
+            return build_validation_result(True, None, None)
+        
 
 ### Dialog Actions Helper Functions ###
 def get_slots(intent_request):
@@ -124,7 +161,32 @@ def recommend_portfolio(intent_request):
     risk_level = get_slots(intent_request)["riskLevel"]
     source = intent_request["invocationSource"]
 
-    # YOUR CODE GOES HERE!
+    if source == "DialogCodeHook":
+        slots = get_slots(intent_request)
+
+        validation_result = validate_data(age, investment_amount, intent_request)
+        if not validation_result["isValid"]:
+            slots[validation_result["violatedSlot"]] = None
+            return elicit_slot(
+                intent_request["session_attributes"],
+                intent_request["currentIntent"]["name"],
+                slots,
+                validation_result["violatedSlot"],
+                validation_result["message"],
+            )
+
+        output_session_attributes = intent_request["sessionAttributes"]
+
+        return delegate(output_session_attributes, get_slots(intent_request))
+
+    initial_recommendation = get_investment_recommendation(risk_level)
+    return close(
+        intent_request["sessionAttributes"],
+        "Fulfilled",
+        {"contentType": "PlainText",
+        "content": """{}Thank you for submitting your information; Based on the information you provide, we suggest you to invest on {}""".format(first_name, initial_recommendation)
+        }
+    )
 
 
 ### Intents Dispatcher ###
