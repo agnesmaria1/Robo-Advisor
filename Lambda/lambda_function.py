@@ -1,6 +1,7 @@
 ### Required Libraries ###
 from datetime import datetime
 from dateutil.relativedelta import relativedelta
+from botocore.vendored import requests
 
 ### Functionality Helper Functions ###
 def parse_int(n):
@@ -25,43 +26,34 @@ def build_validation_result(is_valid, violated_slot, message_content):
         "violatedSlot": violated_slot,
         "message": {"contentType": "PlainText", "content": message_content},
     }
-def get_investment_recommendation(risk_level):
-    risk_levels={
-        "none": "100% bonds (AGG), 0% equities (SPY)",
-        "low": "60% bonds (AGG), 40% equities (SPY)",
-        "medium": "40% bonds (AGG), 60% equities (SPY)",
-        "high": "20% bonds (AGG), 80% equities (SPY)",
-    }
-    return risk_levels[risk_level.lower()]
 
-
-def validate_data(age, investment_amount, intent_request):
+def validate_data(age, investment_amount, risk_level):
     if age is not None:
         age = parse_int(age)
-        if age < 0:
+        if age > 65:
             return build_validation_result(
                 False,
                 "age",
-                "You should be older than 0 to use this service,"
+                "You should be younger than 65 years to use this service,"
                 "Please provide a different age."
             )
-        elif age => 65:
-            return build_validation_result(
-                False,
-                "age",
-                "You should be younger than 65 to use this service,"
-                "Please provide a different age."
-            )
-        if investment_amount is not None:
-            investment_amount = parse_int(investment_amount)
+       
+    if investment_amount is not None:
+        investment_amount = parse_int(investment_amount)
         if investment_amount < 5000:
             return build_validation_result(
                 False,
-                "investment_amount",
+                "investmentAmount",
                 "Investment amount should be greater than 5000 to use this service,"
                 "Please provide a different amount."
             )
-            return build_validation_result(True, None, None)
+    if risk_level is not None:
+        risk_level = risk_level.lower()
+        if risk_level not in ["none", "low", "medium", "high"]:
+            return build_validation_result(
+                False, "riskLevel", "The risk level should be 'None', 'Low', 'Medium' or 'High'."
+                "Please provide a correct risk level.")
+    return build_validation_result(True, None, None)
         
 
 ### Dialog Actions Helper Functions ###
@@ -163,8 +155,8 @@ def recommend_portfolio(intent_request):
 
     if source == "DialogCodeHook":
         slots = get_slots(intent_request)
-
-        validation_result = validate_data(age, investment_amount, intent_request)
+        validation_result = validate_data(age, investment_amount, risk_level)
+        
         if not validation_result["isValid"]:
             slots[validation_result["violatedSlot"]] = None
             return elicit_slot(
@@ -178,14 +170,28 @@ def recommend_portfolio(intent_request):
         output_session_attributes = intent_request["sessionAttributes"]
 
         return delegate(output_session_attributes, get_slots(intent_request))
-
-    initial_recommendation = get_investment_recommendation(risk_level)
+        
+    
+    risk_level = risk_level.lower()
+    initial_recommendation = ""
+    if risk_level == "none":
+        initial_recommendation = "100% bonds (AGG), 0% equities (SPY)"
+    elif risk_level == "low":
+        initial_recommendation = "60% bonds (AGG), 40% equities (SPY)"
+    elif risk_level == "medium":
+        initial_recommendationt = "40% bonds (AGG), 60% equities (SPY)"
+    elif risk_level == "high":
+        initial_recommendation = "20% bonds (AGG), 80% equities (SPY)"
+    else:
+        print("Please choose your risk level of none, low, medium or high")
+        
+    
     return close(
         intent_request["sessionAttributes"],
         "Fulfilled",
         {"contentType": "PlainText",
-        "content": """{}Thank you for submitting your information; Based on the information you provide, we suggest you to invest on {}""".format(first_name, initial_recommendation)
-        }
+        "content": "Hello {}, thank you for submitting your information. Based on the information you provide, we suggest you to invest on {}".format(first_name, initial_recommendation),
+        },
     )
 
 
